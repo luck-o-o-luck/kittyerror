@@ -36,7 +36,7 @@ class CustomSidebarViewProvider implements vscode.WebviewViewProvider {
 	  // This is called every second is decides which doom face to show in the webview
 	  setInterval(() => {
 		let errors = getNumErrors();
-		if (errors === 0) {
+		if (errors[0] === 0 && errors[1] === 0) {
 		  webviewView.webview.html = this.getHtmlContent(webviewView.webview, 0);
 		} else {
 		  webviewView.webview.html = this.getHtmlContent(webviewView.webview, 2);
@@ -68,6 +68,9 @@ function getHtml(kitty: any) {
 		<img class="kitties" src="${kitty}" alt="" >
 		<h1 id="errorNum">${getTextForErrorNumbers()}</h1>
 		<ul> ${getTextForErrorLines()} </ul>
+
+		<h1 id="errorNum">${getTextForWarningsNumbers()}</h1>
+		<ul> ${getTextForWarningLines()} </ul>
 				</section>
 		</body>
 			</html>
@@ -77,10 +80,24 @@ function getHtml(kitty: any) {
 function getTextForErrorNumbers() {
 	var errorNumber = getNumErrors();
 
-	if(errorNumber === 0) {
-		return "No errors in this file. You're a good kitty!";
+	if(errorNumber[0] === 0 && errorNumber[1] === 0) {
+		return "No errors and warnings in this file. You're a good kitty!";
 	} else {
-		return "You have " + errorNumber + " errors in this file. You're a bad kitty!";
+		return "You have " + errorNumber[0] + " errors in this file. You're a bad kitty!";
+	}
+}
+
+function getTextForWarningsNumbers() {
+	var errorNumber = getNumErrors();
+
+	if(errorNumber[1] !== 0) {
+		return "You have " + errorNumber[1] + " warnings in this file. You're a naughty kitty!";
+	}
+	else if (errorNumber[1] === 0 && errorNumber[0] !== 0){
+		return "You have " + errorNumber[1] + " warnings in this file. You're a good kitty!";
+	}
+	else {
+		return " ";
 	}
 }
 
@@ -98,12 +115,26 @@ function getTextForErrorLines() {
 	}
 }
 
-function getNumErrors(): number {
+function getTextForWarningLines() {
+	var errorLines = getWarningLines();
+
+	if(errorLines.size !== 0) {
+		var text = "";
+		errorLines.forEach((value, key) => {
+			text += "<li>Line " + (key + 1) + " has " + (value) + " warning.</li>";
+		});
+		return text;
+	} else {
+		return "";
+	}
+}
+
+function getNumErrors(): [number, number] {
 	const activeTextEditor: vscode.TextEditor | undefined =
 		vscode.window.activeTextEditor;
 
 	if (!activeTextEditor) {
-		return 0;
+		return [0, 0];
 	}
 
 	const document: vscode.TextDocument = activeTextEditor.document;
@@ -127,7 +158,7 @@ function getNumErrors(): number {
 		}
 	}
 
-	return numErrors;
+	return [numErrors, numWarnings];
 }
 
 function getErrorLines(): Map<number, number> {
@@ -147,6 +178,7 @@ function getErrorLines(): Map<number, number> {
 	// Iterate over each diagnostic that VS Code has reported for this file. For each one, add to
 	// a list of objects, grouping together diagnostics which occur on a single line.
 	for (diagnostic of vscode.languages.getDiagnostics(document.uri)) {
+		if (diagnostic.severity === 0) {
 		let key = diagnostic.range.start.line;
 
 		if (aggregatedDiagnostics.has(key)) {
@@ -158,6 +190,42 @@ function getErrorLines(): Map<number, number> {
 		} else {
 			aggregatedDiagnostics.set(key, 1);
 		}
+	}
+	}
+
+	return aggregatedDiagnostics;
+}
+
+function getWarningLines(): Map<number, number> {
+	const activeTextEditor: vscode.TextEditor | undefined =
+		vscode.window.activeTextEditor;
+
+	if (!activeTextEditor) {
+		return new Map<number, number>();
+	}
+
+	const document: vscode.TextDocument = activeTextEditor.document;
+
+	let aggregatedDiagnostics = new Map<number, number>();
+
+	let diagnostic: vscode.Diagnostic;
+
+	// Iterate over each diagnostic that VS Code has reported for this file. For each one, add to
+	// a list of objects, grouping together diagnostics which occur on a single line.
+	for (diagnostic of vscode.languages.getDiagnostics(document.uri)) {
+		if (diagnostic.severity === 1) {
+		let key = diagnostic.range.start.line;
+
+		if (aggregatedDiagnostics.has(key)) {
+			// get value and add 1
+			var value = aggregatedDiagnostics.get(key);
+			if (value) {
+				aggregatedDiagnostics.set(key, value + 1);
+			}
+		} else {
+			aggregatedDiagnostics.set(key, 1);
+		}
+	}
 	}
 
 	return aggregatedDiagnostics;
